@@ -32,6 +32,7 @@ def charger_fichier_excel():
         except FileNotFoundError:
             print(f"{RED}Fichier introuvable. Veuillez vérifier le nom du fichier et réessayer.{RESET}")
 
+
 def obtenir_colonne_email(df):
     """
     Demande à l'utilisateur de spécifier la colonne contenant les adresses email.
@@ -54,6 +55,7 @@ def analyser_emails(emails):
     """
     extensions = []
     domaines = []
+    emails_valides = []
     emails_invalides = []
     emails_multiples = []
 
@@ -75,25 +77,31 @@ def analyser_emails(emails):
             emails_invalides.append((index + 2, email))
             continue
 
+        # Vérification de la validité de l'email
         if '@' in email and '.' in email:
+            # Vérification de l'extension (ex: .com, .fr, etc.)
             extension = email.split('.')[-1]
             if len(extension) >= 2 and len(extension) <= 7 and extension not in extensions:
                 extensions.append(extension)
 
+            # Vérification du domaine (ex: gmail, yahoo, etc.)
             domaine_part = email.split('@')[-1].split('.')
             if len(domaine_part) > 1:
                 domaine = domaine_part[-2]
                 if domaine not in domaines:
                     domaines.append(domaine)
 
-            if extension not in valid_extensions:
+            # Si l'extension est inconnue, on l'ajoute à la liste des emails invalides
+            if extension in valid_extensions:
+                emails_valides.append((index + 2, email))
+            else:
                 emails_invalides.append((index + 2, email))
         else:
             emails_invalides.append((index + 2, email))
 
-    return extensions, domaines, emails_invalides, emails_multiples
+    return extensions, domaines, emails_valides, emails_invalides, emails_multiples
 
-def afficher_resultats(extensions, domaines, emails_invalides, emails_multiples):
+def afficher_resultats(extensions, domaines, emails_valides, emails_invalides, emails_multiples):
     """
     Affiche les résultats de l'analyse des emails.
     """
@@ -105,6 +113,10 @@ def afficher_resultats(extensions, domaines, emails_invalides, emails_multiples)
     print(f"\n{YELLOW}Liste des domaines uniques :{RESET}")
     print(domaines)
 
+    print(f"\n{YELLOW}Emails valides :{RESET}")
+    for index, email in emails_valides:
+        print(f"Index {index}: {email}")
+
     print(f"\n{YELLOW}Emails invalides :{RESET}")
     for index, email in emails_invalides:
         print(f"Index {index}: {email}")
@@ -113,10 +125,51 @@ def afficher_resultats(extensions, domaines, emails_invalides, emails_multiples)
     for index, email in emails_multiples:
         print(f"Index {index}: {email}")
 
-# def revise_file(df, emails_invalides, emails_multiples):
-#     """
-#     Corrige le fichier Excel en réécrivant les emails invalides et multiples.
-#     """
+def revise_file(df, emails_valides, emails_invalides, emails_multiples):
+    """
+    Corrige le fichier Excel en réécrivant les emails invalides et multiples.
+    """
+    invalid_chars = [',', ';', ':', '!']
+
+    # Créer une copie du DataFrame pour appliquer les modifications
+    df_corrected = df.copy()
+
+    # Corriger les emails invalides
+    for index, email in emails_invalides:
+        corrected_email = email.lower()  # Mettre en minuscules
+        corrected_email = corrected_email.replace(',', '.')  # Remplacer les virgules par des points
+        corrected_email = ''.join(char for char in corrected_email if char not in invalid_chars)  # Retirer les caractères invalides
+
+        # Mettre à jour le DataFrame avec l'email corrigé
+        df_corrected.at[index - 2, df.columns[0]] = corrected_email
+
+        # Ajouter l'email corrigé à la liste des emails valides
+        emails_valides.append((index, corrected_email))
+
+    # Corriger les emails multiples
+    for index, email in emails_multiples:
+        corrected_email = email.lower()  # Mettre en minuscules
+        corrected_email = corrected_email.replace(',', '.')  # Remplacer les virgules par des points
+        corrected_email = ''.join(char for char in corrected_email if char not in invalid_chars)  # Retirer les caractères invalides
+
+        # Mettre à jour le DataFrame avec l'email corrigé
+        df_corrected.at[index - 2, df.columns[0]] = corrected_email
+
+        # Ajouter l'email corrigé à la liste des emails valides
+        emails_valides.append((index, corrected_email))
+
+    # Demander à l'utilisateur s'il souhaite enregistrer le fichier corrigé
+    validation = input(f"\n{YELLOW}Voulez-vous enregistrer le fichier corrigé? (oui/non) : {RESET}")
+
+    if validation.lower() == 'oui':
+        # Enregistrer le nouveau fichier Excel
+        output_file = "corrected_file.xlsx"
+        df_corrected.to_excel(output_file, index=False)
+        print(f"{GREEN}Fichier corrigé enregistré sous {output_file}.{RESET}")
+    else:
+        print(f"{RED}Enregistrement du fichier corrigé annulé.{RESET}")
+
+    return df_corrected
 
 
 def enregistrer_rapport(df, emails_invalides, emails_multiples):
@@ -163,12 +216,12 @@ def main():
     df = charger_fichier_excel()
     email_column = obtenir_colonne_email(df)
     emails = df[email_column]
-    extensions, domaines, emails_invalides, emails_multiples = analyser_emails(emails)
-    afficher_resultats(extensions, domaines, emails_invalides, emails_multiples)
-    # revise_file(df, emails_invalides, emails_multiples)
+    extensions, domaines, emails_valides, emails_invalides, emails_multiples = analyser_emails(emails)
+    afficher_resultats(extensions, domaines, emails_valides ,emails_invalides, emails_multiples)
+    revise_file(df, emails_valides,emails_invalides, emails_multiples)
     enregistrer_rapport(df, emails_invalides, emails_multiples)
-    time.sleep(5)
     print(f"{GREEN}Fermeture du programme...{RESET}")
+    time.sleep(2)
 
 if __name__ == "__main__":
     main()
